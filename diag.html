@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Berry Browser · platform probe</title>
+<style>
+  :root{
+    --bg:#08080A; --card:#101014; --line:#24242B; --dim:#6E6E78;
+    --fg:#C9CDD4; --hi:#EDEDEF; --ok:#4AFF7F; --warn:#FFB000; --bad:#FF5F57;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--fg);
+    font-family:var(--mono);font-size:13px;line-height:1.55;
+    -webkit-text-size-adjust:100%}
+  .wrap{max-width:900px;margin:0 auto;padding:14px 12px 40px}
+  header{border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:14px}
+  h1{font-size:17px;color:var(--hi);margin:0 0 6px;letter-spacing:.5px}
+  .sub{color:var(--dim);font-size:12px;margin:0}
+  .blink{display:inline-block;width:9px;height:15px;background:var(--ok);
+    vertical-align:-2px;margin-left:4px;animation:b 1.1s steps(2) infinite}
+  @keyframes b{0%,50%{opacity:1}50.01%,100%{opacity:.15}}
+  h2{font-size:13px;color:var(--ok);letter-spacing:2px;margin:22px 0 8px;
+    text-transform:uppercase}
+  h2.warn{color:var(--warn)} h2.bad{color:var(--bad)} h2.dim{color:var(--dim)}
+  table{border-collapse:collapse;width:100%;font-size:12px}
+  td{padding:3px 6px;border-bottom:1px solid #16161B;vertical-align:top}
+  td.n{width:26px;color:#45454E;text-align:right}
+  td.r{width:34px;font-weight:700}
+  td.d{color:var(--dim);font-size:11px}
+  .P{color:var(--ok)} .F{color:var(--bad)} .U{color:var(--dim)} .E{color:var(--warn)}
+  code{color:var(--hi)}
+  #code{font-size:15px;color:var(--ok);letter-spacing:3px;word-break:break-all;
+    background:#0C0C10;border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:8px 0}
+  .meta{background:#0C0C10;border:1px solid var(--line);border-radius:6px;padding:10px 12px;
+    font-size:11px;color:var(--dim);white-space:pre-wrap;word-break:break-all}
+  button{font-family:var(--mono);font-size:12px;background:#17171C;color:var(--hi);
+    border:1px solid #33333C;border-radius:5px;padding:7px 12px;margin:6px 6px 0 0;cursor:pointer}
+  button:active{background:#23232B}
+  #log{background:#0C0C10;border:1px solid var(--line);border-radius:6px;padding:10px 12px;
+    font-size:12px;min-height:120px;max-height:260px;overflow:auto;white-space:pre-wrap}
+  .k{display:inline-block;min-width:96px;color:var(--hi)}
+  .hint{color:var(--dim);font-size:11px;margin-top:6px}
+  a{color:var(--ok)}
+  .tick{color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Berry Browser · platform probe</h1>
+  <p class="sub">Local diagnostics for chromium-for-bb10 &middot; no network, no storage,
+     nothing is uploaded.<span class="blink"></span></p>
+</header>
+
+<p class="hint" id="originwarn" style="margin-top:0;color:var(--warn)"></p>
+<p class="hint" style="margin-top:0">
+  This page answers two questions that guessing cannot:
+  <b>which platform primitives are actually broken on this device</b>
+  (the reason a login flow may fail), and
+  <b>whether any IME composition event ever reaches the page</b>.
+  Read the <code>CODE</code> line and the tables below.
+</p>
+
+<h2>Environment</h2>
+<div class="meta" id="meta">…</div>
+
+<h2>Summary code</h2>
+<div id="code">…</div>
+<p class="hint">Groups A then B, in order, one character per probe:
+<b class="P">P</b> works &middot; <b class="F">F</b> fails &middot;
+<b class="E">E</b> threw &middot; <b class="U">U</b> unsupported or N/A.</p>
+
+<h2>A &middot; network, TLS, cookies, storage</h2>
+<table id="tA"></table>
+
+<h2>B &middot; window and DOM primitives SPAs need</h2>
+<table id="tB"></table>
+
+<h2>C &middot; IME &amp; key events <span class="tick">(live — press keys now)</span></h2>
+<div id="log"></div>
+<p class="hint">Tap the box, then: <b>Alt</b>, <b>right Alt / AltGr</b>,
+<b>Alt+Enter</b>, and try composing with whatever IME you can select.
+This is the only way to tell apart “the OS never told us” from
+“it told us and Chromium dropped it”.</p>
+
+<h2>Report</h2>
+<div class="meta" id="report">…</div>
+<button id="copy">Copy report</button>
+<button id="dl">Download report</button>
+<button id="again">Re-run probes</button>
+<p class="hint" id="copynote"></p>
+
+</div>
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+/* file:// has an opaque origin, so cookies, storage, ServiceWorker,
+   BroadcastChannel and CORS all misreport there. Run this page from a
+   real https origin (GitHub Pages) for results that mean something. */
+const OPAQUE = location.protocol === "file:";
+const enc = (s) => s;   /* kept for readability in the tables */
+
+let results = [];       /* {grp, code, name, status, detail} */
+function push(grp, name, status, detail) {
+  results.push({grp, code: name, status, detail: detail || ""});
+}
+const CH = {P:"P", F:"F", E:"E", U:"U"};
+
+/* ---------- environment ---------- */
+const env = {
+  ua: navigator.userAgent,
+  origin: location.origin,
+  secure: window.isSecureContext,
+  lang: navigator.language,
+  cores: navigator.hardwareConcurrency,
+  mem: navigator.deviceMemory,
+  touch: ("ontouchstart" in window) ? "yes" : "no",
+  screen: screen.width + "x" + screen.height,
+  dpr: devicePixelRatio,
+  wv: /wv\)/.test(navigator.userAgent) ? "WebView" : "browser",
+  frozen: navigator.wakeLock ? "wakeLock present" : ""
+};
+$("meta").textContent =
+  "origin        " + env.origin + (OPAQUE ? "   (file:// — opaque; storage probes below are meaningless)" : "") + "\n" +
+  "secure ctx    " + env.secure + "\n" +
+  "screen        " + env.screen + "  dpr " + env.dpr + "  touch " + env.touch + "\n" +
+  "cores / mem   " + env.cores + " / " + (env.mem === undefined ? "?" : env.mem) + "\n" +
+  "language      " + env.lang + "\n" +
+  "UA            " + env.ua;
+
+/* ---------- probe helpers ---------- */
+/* Map a probe's return value to a status. The "U" and "E:..." sentinels are
+   explicit so a probe reporting "unsupported" or a named failure is never
+   mistaken for a pass. */
+function T(name, fn) {
+  const S = (v) => {
+    if (v === false)                return push("A", name, "F", "");
+    if (v === true || v === undefined) return push("A", name, "P", "");
+    if (typeof v === "string") {
+      if (v.slice(0, 2) === "F:") return push("A", name, "F", v.slice(2));
+      if (v.slice(0, 2) === "E:") return push("A", name, "E", v.slice(2));
+      if (v.slice(0, 2) === "U:") return push("A", name, "U", v.slice(2));
+      if (v === "U")              return push("A", name, "U", "reported unsupported");
+    }
+    return push("A", name, "P", "");
+  };
+  try {
+    const r = fn();
+    if (r === false) { push("A", name, "F", "explicitly false"); return; }
+    if (r && typeof r.then === "function") {
+      return r.then(
+        (v) => { S(v); },
+        (e) => { push("A", name, "E", String(e && e.message || e).slice(0, 90)); }
+      );
+    }
+    S(r);
+  } catch (e) {
+    push("A", name, "E", String(e && e.message || e).slice(0, 90));
+  }
+}
+function B(name, fn) {
+  try {
+    const r = fn();
+    push("B", name, r ? "P" : "F", "");
+  } catch (e) {
+    push("B", name, "E", String(e && e.message || e).slice(0, 80));
+  }
+}
+const WASM_BYTES = [0, 97, 115, 109, 1, 0, 0, 0, 1, 7, 1, 96, 2, 127, 127, 1, 127, 3, 2, 1, 0, 7, 7, 1, 3, 97, 100, 100, 0, 0, 10, 9, 1, 7, 0, 32, 0, 32, 1, 106, 11];
+const has = (o, k) => (o && k in o);
+const fnHas = (o, k) => (o && typeof o[k] === "function");
+
+/* ---------- group A ---------- */
+const A = [];
+A.push(T("navigator.onLine", () => navigator.onLine !== false));
+A.push(T("navigator.cookieEnabled", () => navigator.cookieEnabled === true));
+
+A.push(T("cookie set/get", () => {
+  if (OPAQUE) return "U:needs a real origin";
+  document.cookie = "probe=abc; path=/; max-age=600";
+  return document.cookie.indexOf("probe=abc") >= 0;
+}));
+A.push(T("cookie SameSite=None", () => {
+  if (OPAQUE) return "U:needs a real origin";
+  document.cookie = "probe2=v; path=/; max-age=600; SameSite=None; Secure";
+  const got = document.cookie.indexOf("probe2=v") >= 0;
+  document.cookie = "probe2=; path=/; max-age=0";
+  return got;
+}));
+A.push(T("fetch no-cors", () =>
+  fetch("https://example.com/", {mode: "no-cors", cache: "no-store"}).then(r => !!r)));
+A.push(T("fetch CORS + body", () => {
+  if (OPAQUE) return "U:needs a real origin";
+  return fetch("https://api.github.com/zen", {mode: "cors", cache: "no-store"})
+    .then(r => r.ok).catch(() => false);
+}));
+
+A.push(T("crypto.getRandomValues", () => {
+  if (!fnHas(crypto, "getRandomValues")) throw new Error("absent");
+  const a = new Uint8Array(16); crypto.getRandomValues(a);
+  return a.some(x => x !== 0);
+}));
+A.push(T("crypto.subtle present", () => !!(crypto && crypto.subtle)));
+A.push(T("crypto.subtle.digest", () => {
+  if (!crypto.subtle) throw new Error("no subtle");
+  return crypto.subtle.digest("SHA-256", new Uint8Array([1, 2, 3]))
+    .then(b => b.byteLength === 32);
+}));
+A.push(T("crypto ECDSA P-256", () => {
+  if (!crypto.subtle) throw new Error("no subtle");
+  return crypto.subtle.generateKey({name: "ECDSA", namedCurve: "P-256"}, false, ["sign", "verify"])
+    .then(() => true);
+}));
+A.push(T("crypto AES-GCM key import", () => {
+  if (!crypto.subtle) throw new Error("no subtle");
+  return crypto.subtle.importKey("raw", new Uint8Array(16),
+    {name: "AES-GCM"}, false, ["encrypt", "decrypt"]).then(() => true);
+}));
+A.push(T("crypto AES-GCM seal/open", () => {
+  if (!crypto.subtle) throw new Error("no subtle");
+  const iv = new Uint8Array(12);
+  let k;
+  return crypto.subtle.importKey("raw", new Uint8Array(16), {name: "AES-GCM"}, false, ["encrypt", "decrypt"])
+    .then((kk) => { k = kk; return crypto.subtle.encrypt({name: "AES-GCM", iv}, k, new Uint8Array([1])); })
+    .then((c) => crypto.subtle.decrypt({name: "AES-GCM", iv}, k, c))
+    .then((p) => new Uint8Array(p)[0] === 1);
+}));
+
+A.push(T("ServiceWorker", () => {
+  if (!("serviceWorker" in navigator)) throw new Error("absent");
+  if (OPAQUE) return "U:file:// cannot register a SW";
+  return navigator.serviceWorker.register(location.href).then(() => true).catch(e => "E:" + e.name);
+}));
+A.push(T("IndexedDB", () => {
+  if (!window.indexedDB) throw new Error("absent");
+  if (OPAQUE) return "U:needs a real origin";
+  return new Promise((res) => {
+    const rq = indexedDB.open("probe", 1);
+    rq.onerror = () => res(false);
+    rq.onsuccess = () => { try { rq.result.close(); } catch (e) {} res(true); };
+    setTimeout(() => res(false), 4000);
+  });
+}));
+A.push(T("localStorage", () => {
+  if (OPAQUE) return "U:file://";   /* opaque origin, expected */
+  localStorage.setItem("p", "1");
+  const ok = localStorage.getItem("p") === "1";
+  localStorage.removeItem("p");
+  return ok;
+}));
+A.push(T("WebAssembly add()", () => {
+  if (!window.WebAssembly) throw new Error("absent");
+  /* (module (func (export "add") (param i32 i32) (result i32) local.get 0 local.get 1 i32.add)) */
+  return WebAssembly.instantiate(new Uint8Array(WASM_BYTES))
+    .then((r) => r.instance.exports.add(2, 3) === 5)
+    .catch((e) => "E:" + String(e && e.message || e).slice(0, 70));
+}));
+A.push(T("BroadcastChannel", () => {
+  if (!window.BroadcastChannel) throw new Error("absent");
+  return new Promise((res) => {
+    const c = new BroadcastChannel("probe");
+    let done = false;
+    const fin = (v) => { if (done) return; done = true; try { c.close(); } catch (e) {} res(v); };
+    c.onmessage = () => fin(true);
+    c.onmessageerror = () => fin("F:messageerror");
+    setTimeout(() => { try { c.postMessage("ping"); } catch (e) {} }, 60);
+    setTimeout(() => fin(OPAQUE ? "U:opaque file:// origin" : "F:no delivery in 2s"), 2000);
+  });
+}));
+A.push(T("navigator.credentials", () => !!(navigator.credentials && fnHas(navigator.credentials, "get"))));
+A.push(T("navigator.sendBeacon", () => fnHas(navigator, "sendBeacon")));
+A.push(T("WebRTC (RTCPeerConnection)", () => fnHas(window, "RTCPeerConnection")));
+A.push(T("performance.memory", () => !!(performance && performance.memory)));
+A.push(T("Worker (blob:)", () => {
+  if (!window.Worker) throw new Error("absent");
+  if (OPAQUE) return "U:blob worker needs a real origin";
+  const u = URL.createObjectURL(new Blob(["postMessage(1)"], {type: "text/javascript"}));
+  return new Promise((res) => {
+    const w = new Worker(u);
+    w.onmessage = () => { res(true); w.terminate(); };
+    w.onerror = () => { res(false); w.terminate(); };
+    setTimeout(() => { try { w.terminate(); } catch (e) {} res(false); }, 2000);
+  });
+}));
+
+/* ---------- group B ---------- */
+B("history.pushState", () => { history.pushState({}, "", "#probe"); return location.hash === "#probe"; });
+B("window.open (popup)", () => {
+  if (OPAQUE) return "U:needs a real origin";
+  let w = null;
+  try { w = window.open("about:blank", "_blank", "width=1,height=1"); } catch (e) { return false; }
+  if (!w) return false;   /* null means the popup was blocked -- OAuth popups need this */
+  /* Chromium returns null when the popup was blocked. Either way we only care
+     that it did not throw. Closing immediately is the safest we can do. */
+  try { w.close(); } catch (e) {}
+  return true;
+});
+B("MessageChannel", () => {
+  if (!window.MessageChannel) throw new Error("absent");
+  return new Promise((res) => {
+    const c = new MessageChannel();
+    c.port1.onmessage = () => res(true);
+    c.port1.postMessage(1);
+    setTimeout(() => res(false), 1500);
+  });
+});
+B("requestAnimationFrame", () => new Promise((res) => requestAnimationFrame(() => res(true))));
+B("ResizeObserver", () => {
+  if (!window.ResizeObserver) throw new Error("absent");
+  new ResizeObserver(() => {}).observe(document.body);
+  return true;
+});
+B("IntersectionObserver", () => {
+  if (!window.IntersectionObserver) throw new Error("absent");
+  new IntersectionObserver(() => {}).observe(document.body);
+  return true;
+});
+B("structuredClone", () => {
+  if (!fnHas(window, "structuredClone")) throw new Error("absent");
+  return structuredClone({a: [1, 2]}).a.length === 2;
+});
+B("TextDecoderStream", () => typeof TextDecoderStream !== "undefined");
+B("matchMedia", () => {
+  if (!fnHas(window, "matchMedia")) throw new Error("absent");
+  const mq = window.matchMedia("(min-width: 1px)");
+  return typeof mq.matches === "boolean";
+});
+B("CSS.supports :has()", () => !!(window.CSS && CSS.supports && CSS.supports("selector(:has(*))")));
+B("CSS.supports nesting", () => !!(window.CSS && CSS.supports && CSS.supports("selector(&)")));
+B("CSS :host selector", () => !!(window.CSS && CSS.supports && CSS.supports("selector(:host)")));
+B("CSS container-type", () => !!(window.CSS && CSS.supports && CSS.supports("(container-type: inline-size)")));
+B("Intl.Segmenter", () => !!(window.Intl && Intl.Segmenter));
+B("Intl.ListFormat", () => !!(window.Intl && Intl.ListFormat));
+B("Intl.RelativeTimeFormat", () => !!(window.Intl && Intl.RelativeTimeFormat));
+B("URLPattern", () => !!window.URLPattern);
+B("Array.prototype.at", () => fnHas(Array.prototype, "at"));
+B("Object.hasOwn", () => fnHas(Object, "hasOwn"));
+B("String.replaceAll", () => fnHas(String.prototype, "replaceAll"));
+B("Promise.any", () => fnHas(Promise, "any"));
+B("WeakRef", () => !!window.WeakRef);
+B("BigInt literal", () => { try { return typeof 1n === "bigint"; } catch (e) { return false; } });
+B("CSS color-mix()", () => !!(window.CSS && CSS.supports && CSS.supports("(color: color-mix(in srgb, red, blue))")));
+B("aspect-ratio CSS", () => !!(window.CSS && CSS.supports && CSS.supports("(aspect-ratio: 1/1)")));
+B("backdrop-filter", () => !!(window.CSS && CSS.supports && CSS.supports("(backdrop-filter: blur(2px))")));
+
+/* ---------- rendering ---------- */
+function render() {
+  const a = results.filter(r => r.grp === "A");
+  const b = results.filter(r => r.grp === "B");
+  const code = a.map(r => CH[r.status]).join("") + b.map(r => CH[r.status]).join("");
+  $("code").textContent = code;
+
+  const tally = (rs) => {
+    const c = {P: 0, F: 0, E: 0, U: 0};
+    rs.forEach(r => c[r.status]++);
+    return c;
+  };
+  const line = (rs) => {
+    const c = tally(rs);
+    return "total " + rs.length + "   pass " + c.P + "   fail " + c.F +
+           "   threw " + c.E + "   N/A " + c.U;
+  };
+  const ta = tally(a), tb = tally(b);
+  $("code").style.color = (ta.F + ta.E + tb.F + tb.E) ? "var(--bad)" : "var(--ok)";
+
+  function table(id, rs, note) {
+    let h = "";
+    rs.forEach((r, i) => {
+      const cls = r.status === "P" ? "P" : r.status === "U" ? "U" : r.status === "E" ? "E" : "F";
+      const word = r.status === "P" ? "pass" : r.status === "U" ? "skip" : r.status === "E" ? "threw" : "FAIL";
+      h += "<tr><td class=n>" + (i + 1) + "</td><td><code>" + enc(r.code) + "</code></td>" +
+           "<td class=r " + cls + ">" + word + "</td>" +
+           '<td class=d>' + (r.detail || "") + "</td></tr>";
+    });
+    $(id).innerHTML = h + '<tr><td></td><td class="tick">' + note + "</td><td></td><td></td></tr>";
+  }
+  table("tA", a, line(a));
+  table("tB", b, line(b));
+
+  const rep = [
+    "Berry Browser platform probe",
+    "origin   " + env.origin + (OPAQUE ? "  (file:// opaque — retest over https)" : ""),
+    "UA       " + env.ua,
+    "",
+    "CODE " + code,
+    "A " + line(a),
+    "B " + line(b),
+    "",
+    "FAILS",
+    a.concat(b).filter(r => r.status !== "P").map(r =>
+      "  " + r.code + ": " + (r.status === "U" ? "n/a" : r.status === "E" ? "threw" : "FAIL") +
+      (r.detail ? " (" + r.detail + ")" : "")).join("\n") || "  none",
+    "",
+    "IME " + imeSummary()
+  ].join("\n");
+  $("report").textContent = rep;
+  return rep;
+}
+
+function imeSummary() {
+  const parts = [];
+  Object.keys(ime.k).forEach((k) => { if (ime.k[k]) parts.push(k + "=" + ime.k[k]); });
+  return parts.length ? parts.join(" ") : "(nothing received yet)";
+}
+
+/* ---------- group C: IME / keys ---------- */
+const ime = {k: {}};
+function bump(k) { ime.k[k] = (ime.k[k] || 0) + 1; paintIME(); }
+let logEl;
+function paintIME() {
+  if (!logEl) logEl = $("log");
+  const order = ["Alt(down)", "Alt(up)", "other key", "AltGraph", "compositionstart",
+                 "compositionupdate", "compositionend", "beforeinput:composition",
+                 "input:insertCompositionText", "paste"];
+  logEl.innerHTML = order.map(k =>
+    '<div><span class="k">' + k + '</span>' +
+    (ime.k[k] ? '<span class="P">' + ime.k[k] + "</span>" : '<span class="tick">0</span>') +
+    "</div>").join("");
+}
+document.addEventListener("keydown", (e) => {
+  /* AltGraph first: on most layouts it also reports key === "Alt", so the
+     generic Alt branch below would otherwise swallow it. */
+  if (e.getModifierState && e.getModifierState("AltGraph")) { bump("AltGraph"); return; }
+  if (e.key === "Alt" || e.code === "AltLeft" || e.code === "AltRight") bump("Alt(down)");
+  else bump("other key");
+}, true);
+document.addEventListener("keyup", (e) => { if (e.key === "Alt") bump("Alt(up)"); }, true);
+document.addEventListener("compositionstart", () => bump("compositionstart"), true);
+document.addEventListener("compositionupdate", () => bump("compositionupdate"), true);
+document.addEventListener("compositionend", () => bump("compositionend"), true);
+document.addEventListener("beforeinput", (e) => {
+  if (e.inputType && e.inputType.indexOf("Composition") === 0) bump("beforeinput:composition");
+}, true);
+document.addEventListener("input", (e) => {
+  if (e.inputType === "insertCompositionText") bump("input:insertCompositionText");
+}, true);
+document.addEventListener("paste", () => bump("paste"), true);
+paintIME();
+
+/* ---------- report actions ---------- */
+let lastReport = "";
+$("copy").addEventListener("click", async () => {
+  const n = $("copynote");
+  try {
+    if (!navigator.clipboard) throw new Error("navigator.clipboard absent");
+    await navigator.clipboard.writeText(lastReport);
+    n.innerHTML = '<span class="P">copied</span>';
+  } catch (e) {
+    n.innerHTML = '<span class="F">copy failed: ' + enc(String(e && e.message || e)) +
+      "</span> &mdash; expected if the clipboard is still " +
+      "<code>ClipboardNonBacked</code>, which is itself a useful result. " +
+      "Screenshot or select the text instead.";
+  }
+});
+$("dl").addEventListener("click", () => {
+  const b = new Blob([lastReport], {type: "text/plain"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(b);
+  a.download = "berry-probe.txt";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+});
+$("again").addEventListener("click", () => location.reload());
+
+/* ---------- go ---------- */
+if (!window.isSecureContext) {
+  $("originwarn").innerHTML +=
+    "&#9888; <b>Not a secure context</b> (" + location.protocol + ") &mdash; " +
+    "<code>crypto.subtle</code> is unavailable over plain HTTP, so every crypto " +
+    "probe below will report a false failure. Use an https:// URL. ";
+}
+if (OPAQUE) {
+  $("originwarn").innerHTML =
+    "&#9888; Loaded from <code>file://</code> &mdash; the origin is opaque, so cookies, " +
+    "IndexedDB, ServiceWorker, BroadcastChannel and cross-origin fetch will all report " +
+    "failure here whether or not the device is broken. Reload over https from " +
+    "<a href=\"https://eazylee30.github.io/berrybrowser-cjk/diag.html\">eazylee30.github.io</a> " +
+    "for results you can act on.";
+}
+
+Promise.allSettled(A).then(() => {
+  lastReport = render();
+  if (OPAQUE) {
+    $("tA").insertAdjacentHTML("beforeend",
+      '<tr><td></td><td class="tick">opaque file:// origin — N/E here is expected, ' +
+      'not a device bug. Reload over https.</td><td></td><td></td></tr>');
+  }
+  $("code").textContent = $("code").textContent + "   ·   ready";
+});
+</script>
+</body>
+</html>
