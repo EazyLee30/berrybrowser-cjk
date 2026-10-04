@@ -1,0 +1,13 @@
+# Downloaded on demand by build_bar.py (61 MB upstream release)
+work/
+
+# Built .bar files -- published as GitHub Release assets, not committed
+out/
+
+# Optional fonts; run sh fetch-fonts.sh
+fonts/NotoSansCJKsc-Regular.otf
+fonts/DroidSansFallback.ttf
+
+__pycache__/
+*.pyc
+.DS_Store
