@@ -225,6 +225,15 @@ font problem, and no repack touches it.
   there is no way to substitute a monospace face for some characters and not
   others.
 
+Before concluding anything about a login failure or the IME, run
+[`diag.html`](diag.html) on the device — <https://eazylee.xyz/berrybrowser-cjk/diag.html>.
+It measures the primitives a login flow actually depends on (cookies including
+`SameSite=None`, WebCrypto, ServiceWorker, IndexedDB, blob Worker,
+BroadcastChannel, cross-origin fetch, `window.open` for OAuth popups) and counts
+whether any `compositionstart`/`compositionupdate`/`beforeinput` ever reaches
+the page. Guessing which of those is broken has produced several wrong answers
+already, including several of mine.
+
 **The realistic next increment is a real QNX clipboard backend, not an IME
 client** — a much smaller job, self-contained (it does not touch Blink or the
 renderer at all), and it would make text composed anywhere in BB10 pasteable
@@ -244,6 +253,7 @@ anyone's — can be compiled without it.
 | [`on-device-fix.sh`](on-device-fix.sh) | contingency if the installer didn't create `fonts/` |
 | [`fetch-fonts.sh`](fetch-fonts.sh) | optional fonts (the default one is committed) |
 | [`upstream/`](upstream/launcher-fonts.patch) | the source-level fix for `berry-v3` |
+| [`diag.html`](diag.html) | device probe — measures the primitives a login flow needs, and whether any IME composition event arrives at all. Live: <https://eazylee.xyz/berrybrowser-cjk/diag.html> |
 | [`fonts/`](fonts/LICENSES.md) | candidate fonts + licences |
 | [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) | what is ours and what is not |
 

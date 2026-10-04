@@ -99,6 +99,34 @@ Work through these in order:
 Expected. Not fixable by repacking. See README §7 — no IME context on a
 Cascades-less native app, and the clipboard is `ClipboardNonBacked`.
 
+## The platform probe (run this before theorising)
+
+<https://eazylee.xyz/berrybrowser-cjk/diag.html> — served over https, which
+matters: from `file://` the origin is opaque and every cookie, storage,
+ServiceWorker and BroadcastChannel result is a false failure.
+
+Open it **in Berry Browser**, wait for `· ready`, then read the `CODE` line and
+the tables. Reload once before trusting the ServiceWorker line: the first load
+installs asynchronously, so `ServiceWorker controller` reports N/A by design.
+
+Then **tap the page and press keys** — `Alt`, right `Alt`, `Alt+Enter`, and
+whatever compose gesture your IME uses. Section C counts:
+
+| Counter | What it tells you |
+|---|---|
+| `Alt(down)` non-zero | Alt reaches the renderer at all. Zero means the port drops it (build 84 did). |
+| `AltGraph` non-zero | The right Alt / AltGr key is distinguishable. |
+| `compositionstart` **zero** | The OS never delivered composition to the app. Nothing in the browser can fix that. |
+| `compositionstart` non-zero but `beforeinput:composition` zero | The IME *is* arriving and Chromium is dropping it — that is a real Blink/port bug and worth reporting upstream. |
+
+Copy/download will fail on build 106: the clipboard is `ClipboardNonBacked`,
+which is itself confirmation. Screenshot the page, or read the `CODE` string
+aloud — 50 characters.
+
+**Do not run it in desktop Chrome and conclude anything about the phone.** If
+the page says it is headless or unfocused it flags `window.open (popup)` and
+`BroadcastChannel` as unreliable for that session.
+
 ## A site will not log in
 
 Do these in order; stop when it starts working, because each step changes one
