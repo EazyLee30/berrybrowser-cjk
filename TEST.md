@@ -1,4 +1,15 @@
-# On-device test procedure
+<p align="center">
+  <img src="assets/banner.svg" alt="Berry Browser CJK" width="420">
+</p>
+
+<p align="center">
+  <a href="README.md">README</a> ·
+  <a href="TEST.md">TEST</a> ·
+  <a href="TROUBLESHOOTING.md">TROUBLESHOOTING</a>
+</p>
+
+---
+
 
 Do these in order. **Step 1 installs nothing** and proves (or kills) the whole
 diagnosis in about two minutes, so never skip it.

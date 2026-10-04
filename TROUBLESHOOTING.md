@@ -1,4 +1,15 @@
-# Troubleshooting
+<p align="center">
+  <img src="assets/banner.svg" alt="Berry Browser CJK" width="420">
+</p>
+
+<p align="center">
+  <a href="README.md">README</a> ·
+  <a href="TEST.md">TEST</a> ·
+  <a href="TROUBLESHOOTING.md">TROUBLESHOOTING</a>
+</p>
+
+---
+
 
 ## Marker files — the no-rebuild A/B controls
 

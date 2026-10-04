@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-label="Berry Browser CJK — Chinese text on BlackBerry 10, without rebuilding Chromium">
+  <title>Berry Browser CJK</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#111114"/>
+      <stop offset="1" stop-color="#08080A"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4AFF7F" stop-opacity="0.07"/>
+      <stop offset="0.55" stop-color="#4AFF7F" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="scan" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="1" fill="#FFFFFF" opacity="0.035"/>
+    </pattern>
+    <clipPath id="card">
+      <rect x="0" y="0" width="1280" height="360" rx="12"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#card)">
+    <rect width="1280" height="360" fill="url(#bg)"/>
+    <rect width="1280" height="360" fill="url(#sheen)"/>
+
+    <!-- ghosted CJK glyph, right side -->
+    <text x="1215" y="330" text-anchor="end"
+          font-family="PingFang SC, Hiragino Sans GB, Noto Sans CJK SC, Arial Unicode MS, sans-serif"
+          font-size="330" font-weight="700" fill="#4AFF7F" opacity="0.055">&#20013;</text>
+
+    <!-- window chrome -->
+    <rect x="0" y="0" width="1280" height="42" fill="#17171B"/>
+    <rect x="0" y="41" width="1280" height="1" fill="#26262C"/>
+    <circle cx="26" cy="21" r="5.5" fill="#FF5F57"/>
+    <circle cx="46" cy="21" r="5.5" fill="#FEBC2E"/>
+    <circle cx="66" cy="21" r="5.5" fill="#28C840"/>
+    <text x="88" y="27" font-family="Menlo, Monaco, Consolas, monospace"
+          font-size="14" fill="#6E6E78" letter-spacing="1.5">berrybrowser-cjk</text>
+    <text x="1256" y="27" text-anchor="end" font-family="Menlo, Monaco, Consolas, monospace"
+          font-size="14" fill="#4AFF7F" letter-spacing="1.5">v3.0.4</text>
+
+    <!-- title -->
+    <text x="64" y="152" font-family="Menlo, Monaco, Consolas, monospace"
+          font-size="62" font-weight="700" fill="#EDEDEF" letter-spacing="1">BERRY BROWSER</text>
+    <text x="602" y="152" font-family="Menlo, Monaco, Consolas, monospace"
+          font-size="62" font-weight="700" fill="#4AFF7F" letter-spacing="1">CJK</text>
+    <rect x="730" y="104" width="26" height="52" fill="#4AFF7F" opacity="0.85"/>
+
+    <!-- rule -->
+    <rect x="64" y="188" width="1152" height="1" fill="#2A2A31"/>
+
+    <!-- subtitle -->
+    <text x="64" y="228" font-family="Menlo, Monaco, Consolas, monospace"
+          font-size="21" fill="#9AA0A6" letter-spacing="2.6">CHINESE TEXT ON BLACKBERRY 10</text>
+    <text x="64" y="256" font-family="Menlo, Monaco, Consolas, monospace"
+          font-size="21" fill="#6E6E78" letter-spacing="2.6">A BUNDLED FONT, A QNX_FONT_DIR, AND NOTHING ELSE</text>
+
+    <!-- tags -->
+    <g font-family="Menlo, Monaco, Consolas, monospace" font-size="14" letter-spacing="1.2">
+      <rect x="64"  y="286" width="90"  height="30" rx="6" fill="#121215" stroke="#2E2E36"/>
+      <text x="80"  y="307" fill="#B9BEC6">QNX 8.0</text>
+      <rect x="166" y="286" width="76"  height="30" rx="6" fill="#121215" stroke="#2E2E36"/>
+      <text x="182" y="307" fill="#B9BEC6">ARMv7</text>
+      <rect x="254" y="286" width="230" height="30" rx="6" fill="#121215" stroke="#2E2E36"/>
+      <text x="270" y="307" fill="#4AFF7F">ENGINE UNTOUCHED</text>
+      <rect x="496" y="286" width="176" height="30" rx="6" fill="#121215" stroke="#2E2E36"/>
+      <text x="512" y="307" fill="#FFB000">BASE BUILD 106</text>
+    </g>
+
+    <!-- scanlines -->
+    <rect width="1280" height="360" fill="url(#scan)"/>
+  </g>
+  <rect x="0.5" y="0.5" width="1279" height="359" rx="12" fill="none" stroke="#2A2A31"/>
+</svg>
