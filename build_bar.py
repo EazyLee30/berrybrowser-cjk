@@ -33,6 +33,7 @@ import sys
 import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import patch_compat  # noqa: E402
 import patch_launcher  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -228,6 +229,12 @@ def main() -> int:
     ap.add_argument("--outdir", default=os.path.join(HERE, "out"))
     ap.add_argument("--font-name", default=None,
                     help="file name inside the BAR (default: source file name)")
+    ap.add_argument("--profile", default="plain", choices=sorted(patch_compat.PROFILES),
+                    help="'compat' forces a desktop UA, HTTP/1.1, ServiceWorker "
+                         "off, no telemetry blocklist, and removes the fake "
+                         "media-device flags, all via launcher string patches. "
+                         "An attempt at login/Heavy-SPA compatibility -- see "
+                         "patch_compat.py for the reasoning.")
     ap.add_argument("--in-place", action="store_true",
                     help="reuse the source's own Package-Name, so this .bar "
                          "UPGRADES/replaces the official app instead of sitting "
@@ -264,7 +271,8 @@ def main() -> int:
     out_bar = os.path.join(
         args.outdir,
         f"BerryBrowserCJK-{rel['file'].split('-')[-1].replace('.bar', '')}"
-        f"-cjk{args.build}.bar",
+        + (f"-{args.profile}" if args.profile != "plain" else "")
+        + f"-cjk{args.build}.bar",
     )
 
     with zipfile.ZipFile(src) as z:
@@ -280,6 +288,12 @@ def main() -> int:
     # --- 1. payload ------------------------------------------------------
     print("payload")
     blobs["native/launcher"] = patch_launcher.patch(blobs["native/launcher"])
+    profile = patch_compat.PROFILES[args.profile]
+    if profile:
+        print(f"compat profile: {args.profile} ({len(profile)} edits)")
+        blobs["native/launcher"], compat_log = patch_compat.apply(
+            blobs["native/launcher"], profile)
+        print("\n".join(compat_log))
     with open(args.font, "rb") as f:
         font_bytes = f.read()
     blobs[font_asset] = font_bytes

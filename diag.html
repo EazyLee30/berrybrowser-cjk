@@ -80,6 +80,15 @@
 <h2>B &middot; window and DOM primitives SPAs need</h2>
 <table id="tB"></table>
 
+<h2>D &middot; engine vintage <span class="tick">(missing = too old for 2026 sites)</span></h2>
+<div class="meta" id="vintage">…</div>
+<table id="tD"></table>
+<p class="hint">Every <b>F</b> here is a language or web-platform feature that
+exists in a current desktop browser and <b>not</b> in this one. A site bundle
+that uses one of them fails to parse in V8 and never boots &mdash; which looks
+exactly like &ldquo;Something went wrong&rdquo; with nothing in the log. The
+labels say which Chrome release introduced each one.</p>
+
 <h2>C &middot; IME &amp; key events <span class="tick">(live — press keys now)</span></h2>
 <div id="log"></div>
 <p class="hint">Tap the box, then: <b>Alt</b>, <b>right Alt / AltGr</b>,
@@ -171,6 +180,24 @@ function B(name, fn) {
   }
 }
 const WASM_BYTES = [0, 97, 115, 109, 1, 0, 0, 0, 1, 7, 1, 96, 2, 127, 127, 1, 127, 3, 2, 1, 0, 7, 7, 1, 3, 97, 100, 100, 0, 0, 10, 9, 1, 7, 0, 32, 0, 32, 1, 106, 11];
+/* Group D: features and syntax that landed in V8 AFTER the engine this port
+   ships (Chrome 120 / V8 12.0, Dec 2023). These are the ones a 2025-2026 site
+   bundle starts depending on, and a bundle that uses one V8 cannot parse never
+   boots -- which looks exactly like "Something went wrong" with no console
+   error anywhere. */
+function D(name, fn) {
+  try {
+    const r = fn();
+    push("D", name, r ? "P" : "F", "");
+  } catch (e) {
+    push("D", name, "E", String(e && e.message || e).slice(0, 60));
+  }
+}
+function Dnew(name, land, fn) {
+  D(name, fn);
+  const rec = results[results.length - 1];
+  rec.detail = rec.status === "P" ? "in Chrome " + land + "+" : "ADDED IN CHROME " + land;
+}
 const has = (o, k) => (o && k in o);
 const fnHas = (o, k) => (o && typeof o[k] === "function");
 
@@ -360,11 +387,40 @@ B("CSS color-mix()", () => !!(window.CSS && CSS.supports && CSS.supports("(color
 B("aspect-ratio CSS", () => !!(window.CSS && CSS.supports && CSS.supports("(aspect-ratio: 1/1)")));
 B("backdrop-filter", () => !!(window.CSS && CSS.supports && CSS.supports("(backdrop-filter: blur(2px))")));
 
+/* ---------- group D: engine vintage ---------- */
+Dnew("Array.fromAsync", 121, () => fnHas(Array, "fromAsync"));
+Dnew("Iterator.from", 122, () => !!window.Iterator && fnHas(Iterator, "from"));
+Dnew("Iterator helpers", 122, () => !!window.Iterator &&
+  fnHas(Iterator.prototype, "map") && fnHas(Iterator.prototype, "take"));
+Dnew("Set ops (union/intersect)", 122, () => fnHas(Set.prototype, "union") &&
+  fnHas(Set.prototype, "intersection"));
+Dnew("ArrayBuffer.transfer", 122, () => fnHas(ArrayBuffer.prototype, "transfer"));
+Dnew("RegExp v flag", 125, () => { try { new RegExp("a", "v"); return true; } catch (e) { return false; } });
+Dnew("Promise.withResolvers", 119, () => fnHas(Promise, "withResolvers"));
+Dnew("Object.groupBy", 117, () => fnHas(Object, "groupBy"));
+Dnew("Uint8Array.toBase64", 140, () => fnHas(Uint8Array.prototype, "toBase64"));
+Dnew("Float16Array", 135, () => !!window.Float16Array);
+Dnew("using declaration (syntax)", 134, () => {
+  try { new Function("using x = null; return 1;"); return true; }
+  catch (e) { return e instanceof SyntaxError ? false : true; }
+});
+
+/* Every item here ships in a current desktop browser, so a FAIL means this
+   engine predates it -- and a site bundle using it will not parse. */
+function vintageVerdict() {
+  const d = results.filter(r => r.grp === "D");
+  const added = d.filter(r => r.detail && r.detail.startsWith("ADDED"));
+  const here = added.length ? added.map(r => r.code).join(", ") : "(nothing new is missing)";
+  return d.length + " checked, " + added.length + " shipped after this engine: " + here;
+}
+
 /* ---------- rendering ---------- */
 function render() {
   const a = results.filter(r => r.grp === "A");
   const b = results.filter(r => r.grp === "B");
-  const code = a.map(r => CH[r.status]).join("") + b.map(r => CH[r.status]).join("");
+  const d = results.filter(r => r.grp === "D");
+  const code = a.map(r => CH[r.status]).join("") + b.map(r => CH[r.status]).join("")
+            + d.map(r => CH[r.status]).join("");
   $("code").textContent = code;
 
   const tally = (rs) => {
@@ -377,8 +433,9 @@ function render() {
     return "total " + rs.length + "   pass " + c.P + "   fail " + c.F +
            "   threw " + c.E + "   N/A " + c.U;
   };
-  const ta = tally(a), tb = tally(b);
+  const ta = tally(a), tb = tally(b), td = tally(d);
   $("code").style.color = (ta.F + ta.E + tb.F + tb.E) ? "var(--bad)" : "var(--ok)";
+  $("vintage").textContent = vintageVerdict();
 
   function table(id, rs, note) {
     let h = "";
@@ -393,6 +450,7 @@ function render() {
   }
   table("tA", a, line(a));
   table("tB", b, line(b));
+  table("tD", d, line(d));
 
   const rep = [
     "Berry Browser platform probe",
@@ -402,9 +460,12 @@ function render() {
     "CODE " + code,
     "A " + line(a),
     "B " + line(b),
+    "D " + line(d),
     "",
-    "FAILS",
-    a.concat(b).filter(r => r.status !== "P").map(r =>
+    "ENGINE VINTAGE: " + vintageVerdict(),
+    "",
+    "NOT PASSING",
+    a.concat(b).concat(d).filter(r => r.status !== "P").map(r =>
       "  " + r.code + ": " + (r.status === "U" ? "n/a" : r.status === "E" ? "threw" : "FAIL") +
       (r.detail ? " (" + r.detail + ")" : "")).join("\n") || "  none",
     "",
