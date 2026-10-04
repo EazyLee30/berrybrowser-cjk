@@ -245,6 +245,7 @@ anyone's — can be compiled without it.
 | [`fetch-fonts.sh`](fetch-fonts.sh) | optional fonts (the default one is committed) |
 | [`upstream/`](upstream/launcher-fonts.patch) | the source-level fix for `berry-v3` |
 | [`fonts/`](fonts/LICENSES.md) | candidate fonts + licences |
+| [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) | what is ours and what is not |
 
 ## 8. Credits
 

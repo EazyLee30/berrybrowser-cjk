@@ -19,13 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-The font redistributed inside the built .bar files
-(fonts/NotoSansSC-Regular.otf, fonts/NotoSansCJKsc-Regular.otf) is licensed
-separately under the SIL Open Font License 1.1. See fonts/LICENSES.md.
-
-Berry Browser itself is the work of sw7ft and is not covered by this license.
-This project only repackages the author's published .bar; it contains none of
-their code.
