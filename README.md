@@ -140,6 +140,8 @@ build_bar.py             repack: patch launcher, add font, new manifest + ids
 verify_bar.py            25 checks; run this before every sideload
 on-device-fix.sh         contingency if the installer didn't create fonts/
 fetch-fonts.sh           optional fonts (the default one is committed)
+upstream/                launcher-fonts.patch: the source-level fix for sw7ft,
+                         i.e. what belongs in berry-v3 rather than in a repack
 fonts/                   the candidate fonts + LICENSES.md
 work/                    scratch: the 61 MB upstream .bar, downloaded on demand
 out/                     the built .bar files

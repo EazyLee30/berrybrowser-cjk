@@ -1,0 +1,82 @@
+Source-level fix for sw7ft/chromium-for-bb10 (Berry Browser), so that
+Simplified Chinese renders.
+
+This is the change that belongs upstream. build_bar.py in this repo does NOT
+apply it — it reaches the same result in an already-compiled .bar by patching
+the launcher's .rodata, because repackaging a release requires no toolchain.
+Apply this instead if you are rebuilding content_shell anyway.
+
+Against deploy/berry-shell-bar/launcher.c and bar-descriptor.xml on `main`
+(the sources shipped in BerryBrowserV3-3.0.2-build84.bar).
+
+Then add ONE font to the BAR staging dir:
+
+  fonts/NotoSansSC-Regular.otf
+  https://github.com/notofonts/noto-cjk/raw/main/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf
+  sha256 faa6c9df652116dde789d351359f3d7e5d2285a2b2a1f04a2d7244df706d5ea9
+  (SIL OFL 1.1; 8.3 MB; 20 976 CJK + 6 582 CJK Ext-A glyphs plus full Latin)
+
+Do NOT put it in /usr/fonts/font_repository or alongside the system fonts:
+see the launcher.c comment for why the font directory must hold exactly one
+file.
+
+--- a/deploy/berry-shell-bar/launcher.c
++++ b/deploy/berry-shell-bar/launcher.c
+@@ -161,12 +161,38 @@
+     setenv("LD_LIBRARY_PATH", ld, 1);
+   }
+ 
+-  /* HTTPS trust anchors shipped with the app (PEM bundle). */
++  /* Fonts. Skia's directory font manager reads QNX_FONT_DIR (see
++   * skia::CreateDefaultSkFontMgr() in src/content/shell/app/qnx_platform_stubs.cc)
++   * and falls back to /usr/fonts/font_repository, whose BB10 fonts have no
++   * Simplified Chinese -- that is why every CJK codepoint renders as a box.
++   *
++   * The path has to be absolute: we chdir()ed off the asset dir above, so a
++   * relative value (from <env> or the Entry-Point VAR=value prefix) would
++   * resolve against the wrong directory, and the asset dir itself is only
++   * knowable at run time. `dir` came from /proc/self/exefile, so append to it.
++   *
++   * Keep exactly ONE font in here. QNX_FONT_DIR is not just an extra fallback:
++   * with fontconfig stubbed to `return false` no family ever matches, and
++   * FontCache::PlatformFallbackFontForCharacter() returns
++   * GetLastResortFallbackFont(), so *every* text run in the browser resolves to
++   * the single typeface the font manager hands back when nothing matched. One
++   * font therefore has to carry both Latin and CJK -- Noto Sans SC does
++   * (20 976 CJK + 6 582 Ext-A glyphs plus full Latin), and Latin keeps working
++   * because it is the same face.
++   *
++   * Note this replaces the QNX_CA_BUNDLE export below: it is the only
++   * "build a path from the asset dir and export it" block in the launcher.
++   * That is harmless here -- QNX_CA_BUNDLE occurs exactly once in
++   * content_shell.exe (a child-process env forwarding entry in
++   * patches/mp-gpu-navigation.patch), is never read as a certificate path, and
++   * HTTPS already relies on --ignore-certificate-errors -- but if you ever grow
++   * a real trust store, move both setenv()s into one helper.
++   */
+   {
+-    char ca[2200];
+-    snprintf(ca, sizeof(ca), "%s/root_store.certs", dir);
+-    if (access(ca, R_OK) == 0)
+-      setenv("QNX_CA_BUNDLE", ca, 1);
++    char fonts[2200];
++    snprintf(fonts, sizeof(fonts), "%s/fonts", dir);
++    if (access(fonts, R_OK) == 0)
++      setenv("QNX_FONT_DIR", fonts, 1);
+   }
+ 
+   /* Orientation correction for the Navigator-composited window (overridable). */
+--- a/deploy/berry-shell-bar/bar-descriptor.xml
++++ b/deploy/berry-shell-bar/bar-descriptor.xml
+@@ -26,6 +26,11 @@
+     <asset path="payload/snapshot_blob.bin">snapshot_blob.bin</asset>
+     <asset path="payload/root_store.certs">root_store.certs</asset>
+ 
++    <!-- One font that carries both Latin and Simplified Chinese, loaded via
++         QNX_FONT_DIR (the launcher sets it from /proc/self/exefile). Must be
++         the ONLY font in that directory -- see the comment in launcher.c. -->
++    <asset path="fonts/NotoSansSC-Regular.otf">fonts/NotoSansSC-Regular.otf</asset>
++
+     <!-- Local start page (omnibox + bookmarks) loaded by default. -->
+     <asset path="home.html">home.html</asset>
+ 
