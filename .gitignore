@@ -11,3 +11,6 @@ fonts/DroidSansFallback.ttf
 __pycache__/
 *.pyc
 .DS_Store
+
+# Local preview raster of assets/banner.svg (regenerate: rsvg-convert -w 1280 -h 360 assets/banner.svg -o assets/banner.png)
+assets/banner.png
