@@ -138,6 +138,46 @@ Relaunch from the home screen.
 
 ---
 
+## Step 5 — Alt key and Chinese input (read this before testing either)
+
+**Do not test Alt on a build 84 `.bar`.** On build 84 the Alt key never reaches
+the app at all — that is [upstream issue #2](https://github.com/sw7ft/chromium-for-bb10/issues/2),
+fixed in build 104/106. Anything you conclude from Alt on build 84 is worthless.
+Install a build 106 `.bar` first.
+
+Then separate the two questions, because they have different answers:
+
+**5a. Does Alt work as a modifier?** Tap into the page, press **Alt+←** (or
+Alt+→). You should navigate back/forward. If that works, Alt reaches the app and
+the Alt fix is present.
+
+**5b. Does Alt+Enter switch to a Chinese IME?** It will not, and that is
+expected — see README §7. This is not a font problem and not something a `.bar`
+repack can address:
+
+* BB10's Pinyin IME and its candidate window come from the platform IME
+  service. Cascades apps get it through the Qt QNX platform plugin's input
+  context. Berry Browser is a Cascades-less `systemChrome=none` native
+  `Qnx/Elf` app driving libscreen directly, so it has no IME context.
+* The port adds none either — `KeyboardHook::CreateModifierKeyboardHook()`
+  returns `nullptr`, and the `ui::InitializeInputMethod()` in
+  `patches/qnx-port.patch` is only a trace marker.
+* Upstream's "Alt key fixed" note is about Alt as a **modifier**, not the OS
+  input-method toggle.
+* The usual workaround — compose Chinese in a Cascades app and paste — is also
+  closed, because the port stubs the clipboard with `ClipboardNonBacked`, an
+  in-process clipboard with no system backend.
+
+**Control experiment worth doing once:** do the same Alt+Enter test in the
+**stock BlackBerry Browser** on the same device. If it works there and not in
+Berry Browser, that confirms it is the app type (native vs Cascades), not your
+device settings.
+
+Bottom line: Berry Browser can **read** Chinese, not **type** it. On a build 106
+`.bar` from this repo that is the expected end state.
+
+---
+
 ## Rolling back
 
 Delete **Berry Browser CJK** from Settings → Apps. The official **Berry Browser**

@@ -2,16 +2,20 @@
 
 Fixes the "英文正常，中文全是 □□□□" problem in
 [sw7ft/chromium-for-bb10](https://github.com/sw7ft/chromium-for-bb10) Berry Browser
-by **repacking the official `.bar`**. The 96 MB engine binary is not recompiled
-and is byte-for-byte identical to the release.
+by **repacking the official `.bar`**. The engine binary is not recompiled and is
+byte-for-byte identical to the release it was built from.
 
-```
-out/BerryBrowserCJK-3.0.3-build85.bar   70.6 MB   ← default (Noto Sans SC, 8.3 MB)
-out/BerryBrowserCJK-3.0.3-build86.bar   76.9 MB   ← full CJK (Noto Sans CJK SC, 16.4 MB)
-```
+| Output | Base | Installs |
+|---|---|---|
+| `BerryBrowserCJK-build106-cjk107-inplace.bar` | build **106** (current stable, has the Alt-key fix) | **in place** — replaces the official Berry Browser, keeps your profile/cache |
+| `BerryBrowserCJK-build106-cjk107-alongside.bar` | build **106** | **alongside** — new `Package-Id`, for A/B against the official build |
+| `BerryBrowserCJK-3.0.3-build85.bar` | build 84 (older) | alongside — kept for reproducing release v3.0.3 |
+| `BerryBrowserCJK-3.0.3-build86.bar` | build 84 | alongside — same, with the full CJK font |
 
-Both install **alongside** the official Berry Browser (different `Package-Id`),
-so you can A/B them and delete them again without touching the official app.
+**Use a build 106 one.** build 84 predates the Alt-key fix
+([issue #2](https://github.com/sw7ft/chromium-for-bb10/issues/2)) — on build 84
+the Alt key never reaches the app at all, so anything involving Alt cannot be
+tested there. See §7 for what the Alt fix does and does not cover.
 
 ---
 
@@ -154,14 +158,20 @@ GitHub Release.
 ## 6. Build / verify / install
 
 ```bash
-# 1. build — downloads the upstream release on first run
-python3 build_bar.py --font fonts/NotoSansSC-Regular.otf
+# 1. build — downloads the chosen upstream release on first run
+python3 build_bar.py --font fonts/NotoSansSC-Regular.otf --in-place
+#    ^ --release build106 is the default; drop --in-place to install alongside
 
-# 2. verify — 25 checks, all must pass
-python3 verify_bar.py out/BerryBrowserCJK-3.0.3-build85.bar
+# 2. verify — all checks must pass
+python3 verify_bar.py out/BerryBrowserCJK-build106-cjk107-inplace.bar \
+  --src work/BerryBrowserV3-3.0.2-build106.bar --expect-in-place
 
-# 3. sideload out/BerryBrowserCJK-3.0.3-build85.bar (Sachesi / DDPB / device installer)
+# 3. sideload it (Sachesi / DDPB / device installer)
 ```
+
+`--in-place` reuses the source's `Package-Id` byte for byte so BB10 treats it as
+an **upgrade** of the official Berry Browser (appdata, profile and cache
+survive). Without it you get a new `Package-Id` and the two apps coexist.
 
 Then follow **[TEST.md](TEST.md)** — start with step 1 there, which proves the
 diagnosis in about two minutes **without installing anything**.
@@ -170,16 +180,47 @@ Switching fonts / naming is all flags:
 
 ```bash
 sh fetch-fonts.sh cjk     # the full CJK font is not committed
-python3 build_bar.py --font fonts/NotoSansCJKsc-Regular.otf \
-                     --version 3.0.3 --build 86 \
-                     --package com.sw7ft.BerryShellV3CJKFull \
-                     --name "Berry Browser CJK+"
+python3 build_bar.py --release build106 --font fonts/NotoSansCJKsc-Regular.otf \
+                     --in-place --build 108
 ```
 
-Always bump `--package` (or at least `--build`) when rebuilding: BB10 silently
-refuses to overwrite an installed package whose `Package-Id` it already knows.
+`--release` selects the upstream build (`build106` default, `build84` for the
+older one). `--in-place` upgrades the official app instead of sitting beside it.
+Without `--in-place`, **always bump `--build`** when rebuilding: BB10 silently
+refuses to overwrite an installed package whose `Package-Id` *and*
+`Package-Version-Id` it already knows.
 
-## 7. Known limits
+## 7. What this does **not** fix
+
+**You can read Chinese in Berry Browser. You cannot type Chinese in it.** That
+is not a font problem and no amount of font refactoring changes it.
+
+* **Chinese input method (Alt+Enter) needs platform integration Berry Browser
+  does not have.** BB10's Pinyin IME and its candidate window are provided by
+  the platform IME service. Cascades apps get it for free via the Qt QNX
+  platform plugin's input context. Berry Browser is a Cascades-less
+  `systemChrome=none` native `Qnx/Elf` BAR driving libscreen directly through
+  its own `qnx_screen` Ozone backend, so it has no IME context at all — and the
+  port adds none: `ui::KeyboardHook::CreateModifierKeyboardHook()` returns
+  `nullptr`, and the `ui::InitializeInputMethod()` in `patches/qnx-port.patch`
+  is only a `write(2, "QNX:BMRI:8 InputMethod\n", ...)` trace marker.
+* **Upstream's "Alt key fixed" is about Alt as a *modifier*** (Alt+Left and
+  friends, [issue #2](https://github.com/sw7ft/chromium-for-bb10/issues/2)), not
+  about the OS input-method toggle. Do not read it as IME support.
+* **The clipboard is stubbed, which closes the usual workaround.**
+  `qnx_platform_stubs.cc` has `Clipboard* ui::Clipboard::Create() { return new
+  ClipboardNonBacked; }` — an in-process clipboard with no system backend. So
+  you cannot compose Chinese in a Cascades app and paste it in either.
+* **The realistic next step is a real QNX clipboard backend**, which is a much
+  smaller job than writing an IME client: replace `ClipboardNonBacked` with
+  something that talks to the platform, and you can compose text anywhere in
+  BB10 and paste it into Berry Browser. It still needs a rebuild.
+* **Either way, the bottleneck is the toolchain, not the design.** All engine
+  changes require the proprietary **QNX SDP 8.0** (the port's README assumes it
+  at `/root/qnx800`) plus a ~150–250 GB Chromium checkout. Until somebody has
+  that, no engine-side fix — mine, upstream's, or anyone's — can be compiled.
+
+## 8. Other known limits
 
 * **Emoji stay boxes.** No font shipped here has colour emoji, and BB10's own
   fonts have none either, so this is not a regression. A monochrome
@@ -189,7 +230,11 @@ refuses to overwrite an installed package whose `Package-Id` it already knows.
   by emboldening. Shipping Bold/Italic would mean more than one file in the
   directory, which breaks the "single font wins" property described in §3.
 * **Taiwan / Hong Kong / Japanese / Korean** want the full CJK font
-  (`build86`, Noto Sans CJK SC) rather than the SC subset.
+  (`NotoSansCJKsc-Regular.otf`) rather than the SC subset.
+* **Real per-character fallback** — a monospace face for `<pre>`, a second family
+  for CJK while DejaVu keeps serving Latin — needs
+  `PlatformFallbackFontForCharacter()` implemented properly. That is a rebuild,
+  and it is what `upstream/` is *not* about.
 * **Not tested on hardware.** Everything above is verified statically — string
   offsets, SHA-512 digests, byte-identity of the engine binary, font cmap
   coverage, BAR manifest shape. The one thing I cannot do from a Mac is run it

@@ -122,6 +122,10 @@ def main() -> int:
     ap.add_argument("bar")
     ap.add_argument("--src", default=None,
                     help="original .bar, to prove content_shell.exe is untouched")
+    ap.add_argument("--expect-in-place", action="store_true",
+                    help="this build deliberately reuses the source Package-Id "
+                         "(an in-place upgrade), so the package name matching "
+                         "the official app is correct, not a bug")
     args = ap.parse_args()
 
     z = zipfile.ZipFile(args.bar)
@@ -178,6 +182,27 @@ def main() -> int:
                 check(f"{f} byte-identical to source",
                       hashlib.sha256(orig.read(f)).hexdigest()
                       == hashlib.sha256(z.read(f)).hexdigest())
+        src_manifest = orig.read("META-INF/MANIFEST.MF").decode()
+
+        def mfield(text: str, key: str) -> str:
+            return next((l.split(": ", 1)[1].strip() for l in text.splitlines()
+                         if l.startswith(f"{key}: ")), "")
+
+        if args.expect_in_place:
+            check("Package-Id matches the source (real in-place upgrade)",
+                  mfield(manifest, "Package-Id") == mfield(src_manifest, "Package-Id"),
+                  f"ours={mfield(manifest, 'Package-Id')} "
+                  f"source={mfield(src_manifest, 'Package-Id')}")
+            check("Package-Version-Id differs from the source (BB10 sees an upgrade)",
+                  mfield(manifest, "Package-Version-Id")
+                  != mfield(src_manifest, "Package-Version-Id"),
+                  f"ours={mfield(manifest, 'Package-Version-Id')} "
+                  f"source={mfield(src_manifest, 'Package-Version-Id')}")
+        else:
+            check("Package-Id differs from the source (coexists, does not clobber)",
+                  mfield(manifest, "Package-Id") != mfield(src_manifest, "Package-Id"),
+                  f"ours={mfield(manifest, 'Package-Id')} "
+                  f"source={mfield(src_manifest, 'Package-Id')}")
 
     # 5 --------------------------------------------------------------------
     fonts = [n for n in names if n.lower().endswith((".otf", ".ttf", ".ttc", ".otc"))]
@@ -217,9 +242,11 @@ def main() -> int:
     ep = field("Entry-Point")
     check("Entry-Point still points at the launcher",
           "app/native/launcher" in ep, ep)
-    check("package differs from the official build",
-          field("Package-Name") != "com.sw7ft.BerryShellV3",
-          f"{field('Package-Name')} / {field('Application-Name')}")
+    check("package differs from the official build, or is a deliberate in-place rebuild",
+          field("Package-Name") != "com.sw7ft.BerryShellV3"
+          or args.expect_in_place,
+          f"{field('Package-Name')} / {field('Application-Name')} / "
+          f"{field('Package-Id')}")
 
     print()
     if failures:

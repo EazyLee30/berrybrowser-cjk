@@ -37,24 +37,46 @@ import patch_launcher  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# The official release we repackage. Override with --src. 61 MB, so it is not
-# committed -- it is downloaded on demand.
-RELEASE_URL = (
-    "https://github.com/sw7ft/chromium-for-bb10/raw/main/releases/"
-    "BerryBrowserV3-3.0.2-build84.bar"
-)
-DEFAULT_SRC = os.path.join(HERE, "work", "BerryBrowserV3-3.0.2-build84.bar")
+# Official Berry Browser releases we know how to repack. 55-61 MB each, so none
+# are committed -- they are downloaded on demand.
+#
+# build106 is the current stable sideload and is the one you want: it carries the
+# Alt-key fix (upstream issue #2) that build84 lacks.  build84 is kept because the
+# published CJK release v3.0.3 was built from it.
+RELEASES = {
+    "build106": {
+        "url": "https://github.com/sw7ft/berry-browser/releases/download/"
+               "v3.0.2-build106/BerryBrowserV3-3.0.2-build106.bar",
+        "file": "BerryBrowserV3-3.0.2-build106.bar",
+        "package": "com.sw7ft.BerryShellV3",
+        "version": "3.0.2",
+        "build": "106",
+        "name": "Berry Browser",
+    },
+    "build84": {
+        "url": "https://github.com/sw7ft/chromium-for-bb10/raw/main/releases/"
+               "BerryBrowserV3-3.0.2-build84.bar",
+        "file": "BerryBrowserV3-3.0.2-build84.bar",
+        "package": "com.sw7ft.BerryShellV3",
+        "version": "3.0.2",
+        "build": "84",
+        "name": "Berry Browser V3",
+    },
+}
+DEFAULT_RELEASE = "build106"
 
 
-def ensure_source(path: str) -> str:
+def ensure_source(rel: str) -> str:
+    meta = RELEASES[rel]
+    path = os.path.join(HERE, "work", meta["file"])
     if os.path.exists(path):
         return path
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    print(f"source .bar not present, downloading {RELEASE_URL}")
+    print(f"source .bar not present, downloading {meta['url']}")
     try:
         import urllib.request
 
-        with urllib.request.urlopen(RELEASE_URL) as r, open(path, "wb") as f:
+        with urllib.request.urlopen(meta["url"]) as r, open(path, "wb") as f:
             total = int(r.headers.get("Content-Length") or 0)
             done = 0
             while chunk := r.read(1 << 20):
@@ -66,7 +88,7 @@ def ensure_source(path: str) -> str:
     except Exception as e:  # noqa: BLE001
         raise SystemExit(
             f"could not download the source .bar ({e}).\n"
-            f"Fetch it manually:\n  curl -L -o {path} {RELEASE_URL}"
+            f"Fetch it manually:\n  curl -L -o {path} {meta['url']}"
         )
     if os.path.getsize(path) < 10_000_000:
         raise SystemExit(f"downloaded file looks wrong ({os.path.getsize(path)} bytes)")
@@ -190,24 +212,49 @@ def patch_descriptor(xml: str, package_name: str, version: str, build: str,
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--src", default=DEFAULT_SRC,
-                    help="source .bar (downloaded if absent)")
+    ap.add_argument("--release", default=DEFAULT_RELEASE, choices=sorted(RELEASES),
+                    help="which official release to repack (default: %(default)s, "
+                         "the current stable sideload with the Alt-key fix)")
+    ap.add_argument("--src", default=None,
+                    help="explicit source .bar path (overrides --release)")
     ap.add_argument("--font", required=True, help="TTF/OTF with Latin + CJK")
-    ap.add_argument("--name", default="Berry Browser CJK",
-                    help="on-device application name")
-    ap.add_argument("--package", default="com.sw7ft.BerryShellV3CJK",
-                    help="new Package-Name (must differ from the original so "
-                         "the two apps can coexist)")
-    ap.add_argument("--version", default="3.0.3")
-    ap.add_argument("--build", default="85")
+    ap.add_argument("--name", default=None,
+                    help="on-device application name (default: derived)")
+    ap.add_argument("--package", default=None,
+                    help="new Package-Name. Default installs ALONGSIDE the "
+                         "official app; pass --in-place to replace it instead.")
+    ap.add_argument("--version", default=None, help="versionNumber (default: bumped)")
+    ap.add_argument("--build", default=None, help="buildId (default: bumped)")
     ap.add_argument("--outdir", default=os.path.join(HERE, "out"))
     ap.add_argument("--font-name", default=None,
                     help="file name inside the BAR (default: source file name)")
+    ap.add_argument("--in-place", action="store_true",
+                    help="reuse the source's own Package-Name, so this .bar "
+                         "UPGRADES/replaces the official app instead of sitting "
+                         "beside it. BB10 keeps appdata across an in-place "
+                         "upgrade, so your profile and cache survive.")
     args = ap.parse_args()
 
-    ensure_source(args.src)
+    rel = RELEASES[args.release]
+    src = args.src or ensure_source(args.release)
     if not os.path.exists(args.font):
         raise SystemExit(f"font not found: {args.font}")
+
+    if args.package is None:
+        args.package = rel["package"] if args.in_place else rel["package"] + "CJK"
+    if args.name is None:
+        args.name = rel["name"] + " CJK"
+
+    # Read the source manifest first so --version/--build can be derived from it.
+    with zipfile.ZipFile(src) as _z:
+        _src_header, _src_assets = parse_manifest(_z.read("META-INF/MANIFEST.MF").decode())
+        _src_pkgver = next((l.split(": ", 1)[1] for l in _src_header
+                            if l.startswith("Package-Version:")), "3.0.2.0")
+    _parts = _src_pkgver.split(".")
+    if args.version is None:
+        args.version = ".".join(_parts[:3])
+    if args.build is None:
+        args.build = str(int(_parts[3]) + 1) if len(_parts) > 3 else "1"
 
     font_name = args.font_name or os.path.basename(args.font)
     font_asset = f"{NEW_ASSET}/{font_name}"
@@ -216,10 +263,11 @@ def main() -> int:
     os.makedirs(args.outdir, exist_ok=True)
     out_bar = os.path.join(
         args.outdir,
-        f"BerryBrowserCJK-{args.version}-build{args.build}.bar",
+        f"BerryBrowserCJK-{rel['file'].split('-')[-1].replace('.bar', '')}"
+        f"-cjk{args.build}.bar",
     )
 
-    with zipfile.ZipFile(args.src) as z:
+    with zipfile.ZipFile(src) as z:
         names = z.namelist()
         blobs = {n: z.read(n) for n in names}
         infos = {i.filename: i for i in z.infolist()}
@@ -240,9 +288,25 @@ def main() -> int:
 
     # --- 2. ids ----------------------------------------------------------
     print("manifest ids")
+    # BB10 identifies an installed app by Package-Id. To *replace* an existing
+    # install we must reuse the source's Package-Id byte for byte -- deriving a
+    # fresh one from the package name (as the alongside build does) would give a
+    # different app that merely sits next to it.
+    def src_field(key: str, default: str = "") -> str:
+        return next((l.split(": ", 1)[1].strip() for l in header
+                     if l.startswith(f"{key}: ")), default)
+
+    if args.in_place:
+        package_id = src_field("Package-Id")
+        if not package_id:
+            raise SystemExit("--in-place: source manifest has no Package-Id")
+        print(f"  in-place: reusing Package-Id {package_id} from the source")
+    else:
+        package_id = "test" + b64_digest_field(args.package)
+
     ids = {
         "package_name": args.package,
-        "package_id": "test" + b64_digest_field(args.package),
+        "package_id": package_id,
         "package_version": package_version,
         "version_id": "test" + b64_field(package_version),
         "author_id": "test" + b64_field("sw7ft"),
