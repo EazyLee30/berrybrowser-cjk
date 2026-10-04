@@ -147,7 +147,9 @@ fetch-fonts.sh           optional fonts (the default one is committed)
 upstream/                launcher-fonts.patch: the source-level fix for sw7ft,
                          i.e. what belongs in berry-v3 rather than in a repack
 fonts/                   the candidate fonts + LICENSES.md
-work/                    scratch: the 61 MB upstream .bar, downloaded on demand
+TEST.md                  device procedure, starting with a no-install check
+TROUBLESHOOTING.md       marker-file A/B table, log greps, per-symptom steps
+work/                    scratch: the upstream .bar, downloaded on demand
 out/                     the built .bar files
 ```
 
