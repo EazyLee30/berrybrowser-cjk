@@ -69,6 +69,7 @@
 
 <h2>Summary code</h2>
 <div id="code">…</div>
+<p class="hint" id="envnote"></p>
 <p class="hint">Groups A then B, in order, one character per probe:
 <b class="P">P</b> works &middot; <b class="F">F</b> fails &middot;
 <b class="E">E</b> threw &middot; <b class="U">U</b> unsupported or N/A.</p>
@@ -192,10 +193,16 @@ A.push(T("cookie SameSite=None", () => {
 }));
 A.push(T("fetch no-cors", () =>
   fetch("https://example.com/", {mode: "no-cors", cache: "no-store"}).then(r => !!r)));
-A.push(T("fetch CORS + body", () => {
+A.push(T("fetch same-origin", () => {
+  if (OPAQUE) return "U:needs a real origin";
+  return fetch(location.href, {cache: "no-store"})
+    .then((r) => r.ok).catch((e) => "F:" + (e && e.name || e));
+}));
+A.push(T("fetch cross-origin CORS", () => {
   if (OPAQUE) return "U:needs a real origin";
   return fetch("https://api.github.com/zen", {mode: "cors", cache: "no-store"})
-    .then(r => r.ok).catch(() => false);
+    .then((r) => r.ok ? true : "F:HTTP " + r.status)
+    .catch((e) => "F:" + (e && e.name === "TypeError" ? "blocked or no network" : (e && e.name || e)));
 }));
 
 A.push(T("crypto.getRandomValues", () => {
@@ -229,11 +236,18 @@ A.push(T("crypto AES-GCM seal/open", () => {
     .then((p) => new Uint8Array(p)[0] === 1);
 }));
 
-A.push(T("ServiceWorker", () => {
+A.push(T("ServiceWorker register", () => {
   if (!("serviceWorker" in navigator)) throw new Error("absent");
   if (OPAQUE) return "U:file:// cannot register a SW";
-  return navigator.serviceWorker.register(location.href).then(() => true).catch(e => "E:" + e.name);
+  /* Must be a real JS file: registering the HTML document itself fails the
+     MIME check with SecurityError and tells you nothing about the platform. */
+  return navigator.serviceWorker.register("diag-sw.js", {scope: "./"})
+    .then(() => true)
+    .catch((e) => "E:" + (e && e.name ? e.name + " " + e.message : e));
 }));
+A.push(T("ServiceWorker controller", () =>
+  (navigator.serviceWorker && navigator.serviceWorker.controller)
+    ? true : "U:not controlled yet (first load installs asynchronously)"));
 A.push(T("IndexedDB", () => {
   if (!window.indexedDB) throw new Error("absent");
   if (OPAQUE) return "U:needs a real origin";
@@ -488,6 +502,23 @@ Promise.allSettled(A).then(() => {
       '<tr><td></td><td class="tick">opaque file:// origin — N/E here is expected, ' +
       'not a device bug. Reload over https.</td><td></td><td></td></tr>');
   }
+    /* Flag the two probes that depend on the surrounding browser rather than the
+     platform, so a run in headless Chrome or a popup-blocked desktop session is
+     not mistaken for a verdict about the phone. */
+  const soft = [];
+  if (!/Headless/.test(navigator.userAgent)) {
+    /* nothing to add on a real browser */
+  } else {
+    soft.push("this run is Headless Chrome: <code>window.open (popup)</code> and " +
+              "<code>BroadcastChannel</code> are unreliable here");
+  }
+  if (document.hasFocus && !document.hasFocus()) {
+    soft.push("this run had no focus: background timers are throttled, so " +
+              "<code>BroadcastChannel</code> may time out spuriously");
+  }
+  if (soft.length) $("envnote").innerHTML = "&#9888; " + soft.join("; ") +
+    ". Those two results say more about this session than about the device.";
+
   $("code").textContent = $("code").textContent + "   ·   ready";
 });
 </script>
